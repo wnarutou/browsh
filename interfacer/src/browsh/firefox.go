@@ -83,12 +83,21 @@ func startHeadlessFirefox() {
 	if err != nil {
 		Shutdown(err)
 	}
+	if *isDebug {
+		firefoxProcess.Stderr = firefoxProcess.Stdout
+	}
 	if err := firefoxProcess.Start(); err != nil {
 		Shutdown(err)
 	}
 	in := bufio.NewScanner(stdout)
 	for in.Scan() {
 		slog.Info("FF-CONSOLE", "stdout", in.Text())
+		if strings.HasPrefix(in.Text(), "BROWSH-FIREFOX-DIAGNOSTICS \"Console listener ready before addon installation\"") {
+			select {
+			case firefoxConsoleReady <- struct{}{}:
+			default:
+			}
+		}
 	}
 }
 
@@ -322,6 +331,7 @@ func setupFirefox() {
 	}()
 
 	firefoxMarionette()
+	setupFirefoxDebugLogging()
 	installWebextension()
 }
 

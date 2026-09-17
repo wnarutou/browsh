@@ -90,6 +90,12 @@ For the Firefox 79 compatibility build, run with
 also set `--startup-url` to an accessible local URL. Instructions are included
 in each package. These builds are uploaded as Actions artifacts, not GitHub Releases.
 
+With `--debug`, Browsh also captures Firefox stderr and registers a Firefox console
+listener before installing the addon. Look for `FF-CONSOLE` entries containing
+`BROWSH-FIREFOX-CONSOLE` for startup errors and `BROWSH-FIREFOX-ADDON-STATE` for
+the addon state after 10 seconds. `BROWSH-FIREFOX-DIAGNOSTICS` confirms that the
+listener started. This diagnostic logging does not alter the embedded XPI.
+
 ## Tests
 
 For the webextension: in `webext/` folder, `npm test`    

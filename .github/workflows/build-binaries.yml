@@ -132,6 +132,9 @@ jobs:
           The temporary-addon option defaults to false. Enable it explicitly for
           Firefox 79 compatibility; debug.log records the installation request
           and the original Marionette responses. Firefox is not bundled.
+          Debug mode also captures Firefox stderr and startup console errors.
+          Look for FF-CONSOLE lines containing BROWSH-FIREFOX-DIAGNOSTICS,
+          BROWSH-FIREFOX-CONSOLE and BROWSH-FIREFOX-ADDON-STATE (after 10 seconds).
           Built and smoke-tested on Ubuntu, not Kylin V10 SP3 with Firefox 79.
           Actual addon installation and WebSocket connectivity require target testing.
           EOF
