@@ -244,6 +244,10 @@ func installWebextension() {
 		Shutdown(err)
 	}
 	args := map[string]interface{}{"path": path}
+	if viper.GetBool("firefox.temporary-addon") {
+		args["temporary"] = true
+		slog.Info("Installing Browsh WebExtension as temporary addon", "temporary", true)
+	}
 	sendFirefoxCommand("Addon:Install", args)
 }
 

@@ -1,0 +1,163 @@
+name: Build Linux binaries
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-binaries.yml'
+      - 'interfacer/**'
+      - 'scripts/**'
+      - 'ctl.sh'
+  pull_request:
+    paths:
+      - '.github/workflows/build-binaries.yml'
+      - 'interfacer/**'
+      - 'scripts/**'
+      - 'ctl.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: '0'
+      GOOS: linux
+      GOARCH: ${{ matrix.arch }}
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: interfacer/go.mod
+          cache-dependency-path: interfacer/go.sum
+
+      - name: Download official prebuilt WebExtension
+        run: |
+          set -euo pipefail
+          version=$(bash ./ctl.sh browsh_version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "BROWSH_VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE=browsh-$version-linux-$GOARCH" >> "$GITHUB_ENV"
+          # Use the existing bundling flow; no webpack rebuild or signing.
+          mkdir -p webext/dist/web-ext-artifacts
+          bash ./ctl.sh bundle_production_webextension
+          python3 - "$version" <<'PY'
+          import hashlib
+          import json
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          xpi = Path('interfacer/src/browsh/browsh.xpi')
+          with zipfile.ZipFile(xpi) as archive:
+              assert archive.testzip() is None, 'Corrupt XPI'
+              assert json.loads(archive.read('manifest.json'))['version'] == sys.argv[1]
+              for name in ('background.js', 'content.js', 'META-INF/mozilla.rsa'):
+                  assert name in archive.namelist(), f'Missing XPI resource: {name}'
+          digest = hashlib.sha256(xpi.read_bytes()).hexdigest()
+          if sys.argv[1] == '1.8.2':
+              assert digest == 'd38acbc90b7c728dd9ed42670c99a3fbe1389fba1fd198758d0f7405fc27c790', 'Unexpected 1.8.2 XPI'
+          print('Official XPI SHA256:', digest)
+          PY
+
+      - name: Unit tests and vet
+        working-directory: interfacer
+        run: |
+          set -euo pipefail
+          go test -mod=readonly ./src/browsh -count=1
+          go vet -mod=readonly ./src/browsh
+
+      - name: Build and verify native executable
+        working-directory: interfacer
+        run: |
+          set -euo pipefail
+          mkdir -p "../dist/$PACKAGE"
+          # Same entry point and static release flags as the upstream build.
+          go build -mod=readonly -trimpath -ldflags '-s -w' -o "../dist/$PACKAGE/browsh" ./cmd/browsh
+          binary="../dist/$PACKAGE/browsh"
+          test "$("$binary" --version 2>&1)" = "$BROWSH_VERSION"
+          file "$binary" | tee "../dist/$PACKAGE/FILE.txt"
+          go version -m "$binary" > "../dist/$PACKAGE/BUILD_INFO.txt"
+          python3 - "$binary" <<'PY'
+          import os
+          import struct
+          import sys
+          from pathlib import Path
+
+          binary = Path(sys.argv[1]).read_bytes()
+          assert binary[:6] == b'\x7fELF\x02\x01', 'Expected ELF64 little endian'
+          machine = {'arm64': 183, 'amd64': 62}[os.environ['GOARCH']]
+          assert struct.unpack_from('<H', binary, 18)[0] == machine
+          offset = struct.unpack_from('<Q', binary, 32)[0]
+          size, count = struct.unpack_from('<HH', binary, 54)
+          headers = [struct.unpack_from('<I', binary, offset + i * size)[0] for i in range(count)]
+          assert 2 not in headers and 3 not in headers, 'Expected static executable'
+          assert Path('src/browsh/browsh.xpi').read_bytes() in binary, 'Complete XPI not embedded'
+          PY
+
+      - name: Package executable and checksums
+        run: |
+          set -euo pipefail
+          package_dir="dist/$PACKAGE"
+          chmod 755 "$package_dir/browsh"
+          cat > "$package_dir/README.txt" <<'EOF'
+          Browsh Linux executable (Firefox must be installed separately).
+          No Go, Node.js or Docker is required on the target machine.
+
+          Verify and run from an interactive terminal:
+            sha256sum -c SHA256SUMS
+            chmod +x browsh
+            ./browsh --version
+            ./browsh --debug --firefox.path /usr/bin/firefox --firefox.temporary-addon --startup-url http://127.0.0.1:8080 http://127.0.0.1:8080
+          Replace the URL with your reachable local site when running offline.
+          System installation:
+            install -m 755 browsh /usr/local/bin/browsh
+
+          The temporary-addon option defaults to false. Enable it explicitly for
+          Firefox 79 compatibility; debug.log records the installation request
+          and the original Marionette responses. Firefox is not bundled.
+          Built and smoke-tested on Ubuntu, not Kylin V10 SP3 with Firefox 79.
+          Actual addon installation and WebSocket connectivity require target testing.
+          EOF
+          {
+            printf '\nSource commit: %s\nVersion: %s\nArchitecture: linux/%s\n' "$GITHUB_SHA" "$BROWSH_VERSION" "$GOARCH"
+            printf 'XPI source: https://github.com/browsh-org/browsh/releases/download/v%s/browsh-%s.xpi\n' "$BROWSH_VERSION" "$BROWSH_VERSION"
+            sha256sum interfacer/src/browsh/browsh.xpi
+          } >> "$package_dir/BUILD_INFO.txt"
+          (cd "$package_dir" && sha256sum browsh > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tar -czf "dist/$PACKAGE.tar.gz" -C dist "$PACKAGE"
+          (cd dist && sha256sum "$PACKAGE.tar.gz" > "$PACKAGE.tar.gz.sha256")
+          {
+            printf '### %s\n\n' "$PACKAGE"
+            printf 'Source commit: `%s`\n\n' "$GITHUB_SHA"
+            cat "$package_dir/FILE.txt"
+            printf '\nBinary SHA256:\n'
+            cat "$package_dir/SHA256SUMS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload executable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: |
+            dist/${{ env.PACKAGE }}.tar.gz
+            dist/${{ env.PACKAGE }}.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

@@ -40,6 +40,8 @@ profile = "browsh-default"
 use-existing = false
 # Launch Firefox in with its visible GUI window. Useful for setting up the Browsh profile.
 with-gui = false
+# Install the Browsh WebExtension only for this Firefox session (legacy Firefox compatibility).
+temporary-addon = false
 
 # Config that you might usually set through Firefox's 'about:config' page
 # Note that string must be wrapped in quotes

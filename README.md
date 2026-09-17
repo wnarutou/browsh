@@ -66,6 +66,30 @@ Then in the `interfacer` directory
 
 Logs will be available in `interfacer/debug.log`
 
+## Download builds from GitHub Actions
+
+The **Build Linux binaries** workflow builds standalone Linux **ARM64** and
+**AMD64** executables. Push changes to the Go sources/build workflow, or select
+**Actions → Build Linux binaries → Run workflow** after the workflow is on the
+default branch. Pull requests also build both architectures.
+
+Download the matching artifact from the completed run. It contains a `.tar.gz`
+package and its SHA256 checksum. Extract the package to get `browsh`, a README,
+the binary checksum, and build metadata including the source commit.
+
+The workflow uses the Go version in `interfacer/go.mod` and embeds the existing
+signed XPI from the official Browsh release matching `version.go`. It does not
+rebuild or re-sign the WebExtension and needs no signing or publishing secrets.
+If that version has no published XPI, the build fails rather than shipping an
+incomplete executable. Both architectures run unit tests and a native
+`browsh --version` smoke test; Firefox 79/Kylin integration still requires testing
+on the target server. Firefox itself is not included.
+
+For the Firefox 79 compatibility build, run with
+`--firefox.path /usr/bin/firefox --firefox.temporary-addon`. On offline servers,
+also set `--startup-url` to an accessible local URL. Instructions are included
+in each package. These builds are uploaded as Actions artifacts, not GitHub Releases.
+
 ## Tests
 
 For the webextension: in `webext/` folder, `npm test`    
