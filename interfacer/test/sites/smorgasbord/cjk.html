@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>Browsh CJK width check</title>
+<style>
+  body { color: #111; background: #eee; }
+  p { margin: 0 0 1em; }
+  .colour { color: #600; background: #fec; }
+</style>
+<body>
+<p>ABCDEF</p>
+<p>中文测试</p>
+<p>A中B文</p>
+<p>一二三四五六七八九十</p>
+<p>ABC中文123测试XYZ</p>
+<p>中文，测试。</p>
+<p>《中文测试》</p>
+<p>（测试）</p>
+<p>あいう 한글</p>
+<p>e&#x301;B</p>
+<p class="colour">彩色背景：中文 ABC 123</p>
+<p>ASCII after CJK should stay readable.</p>
+</body>
+</html>

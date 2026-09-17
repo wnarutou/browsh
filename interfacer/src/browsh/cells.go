@@ -13,6 +13,11 @@ type cell struct {
 	character []rune
 	fgColour  tcell.Color
 	bgColour  tcell.Color
+	// Keep everything needed for rendering in the locked cell snapshot; the
+	// frame's raw text/pixel maps can be updated concurrently by the receiver.
+	sourceText    []rune
+	pixelFgColour tcell.Color
+	inputOverlay  bool
 }
 
 // Both updating a frame and scrolling a frame can happen at the same time, so we need

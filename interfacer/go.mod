@@ -7,6 +7,7 @@ require (
 	github.com/gdamore/tcell v1.4.0
 	github.com/go-errors/errors v1.5.1
 	github.com/gorilla/websocket v1.5.1
+	github.com/mattn/go-runewidth v0.0.15
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.30.0
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
@@ -23,7 +24,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect

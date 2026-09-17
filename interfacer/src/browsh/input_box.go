@@ -119,9 +119,11 @@ func (i *inputBox) addCharacterToFrame(x int, y int, c rune) {
 		return
 	}
 	inputBoxCell = cell{
-		character: []rune{c},
-		fgColour:  cellFGColour,
-		bgColour:  cellBGColour,
+		character:     []rune{c},
+		fgColour:      cellFGColour,
+		bgColour:      cellBGColour,
+		pixelFgColour: existingCell.pixelFgColour,
+		inputOverlay:  true,
 	}
 	CurrentTab.frame.cells.store(index, inputBoxCell)
 }

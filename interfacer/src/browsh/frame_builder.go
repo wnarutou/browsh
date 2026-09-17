@@ -241,12 +241,13 @@ func (f *frame) isIncomingFramePixelsValid(incoming incomingFramePixels) bool {
 func (f *frame) buildCell(x int, y int) {
 	index := (y * f.totalWidth) + x
 	character, fgColour := f.getCharacterAt(index)
+	sourceText := f.text[index]
 	pixelFg, bgColour := f.getPixelColoursAt(index)
 	if isCharacterTransparent(character) {
 		character = []rune("▄")
 		fgColour = pixelFg
 	}
-	f.addCell(index, fgColour, bgColour, character)
+	f.addCell(index, fgColour, bgColour, character, sourceText, pixelFg)
 }
 
 func (f *frame) getCharacterAt(index int) ([]rune, tcell.Color) {
@@ -278,11 +279,13 @@ func isCharacterTransparent(character []rune) bool {
 	return string(character) == "" || unicode.IsSpace(character[0])
 }
 
-func (f *frame) addCell(index int, fgColour, bgColour tcell.Color, character []rune) {
+func (f *frame) addCell(index int, fgColour, bgColour tcell.Color, character, sourceText []rune, pixelFg tcell.Color) {
 	newCell := cell{
-		fgColour:  fgColour,
-		bgColour:  bgColour,
-		character: character,
+		fgColour:      fgColour,
+		bgColour:      bgColour,
+		character:     character,
+		sourceText:    sourceText,
+		pixelFgColour: pixelFg,
 	}
 	f.cells.store(index, newCell)
 }

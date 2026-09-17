@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"unicode"
 
 	"github.com/gdamore/tcell"
 	"github.com/go-errors/errors"
+	"github.com/mattn/go-runewidth"
 	"github.com/spf13/viper"
 )
 
@@ -228,34 +230,13 @@ func handleTTYResize() {
 // will try to minimise rendering commands by only rendering parts of the terminal
 // that have changed.
 func renderCurrentTabWindow() {
-	var currentCell cell
-	styling := tcell.StyleDefault
-	var runeChars []rune
 	width, height := screen.Size()
 	if CurrentTab == nil || CurrentTab.frame.cells == nil {
 		return
 	}
 	CurrentTab.frame.overlayInputBoxContent()
 	for y := 0; y < height-uiHeight; y++ {
-		for x := 0; x < width; x++ {
-			currentCell = getCell(x, y)
-			runeChars = currentCell.character
-			// TODO: do this is in isCharacterTransparent()
-			if len(runeChars) == 0 {
-				continue
-			}
-			if IsMonochromeMode {
-				styling = styling.Foreground(tcell.ColorWhite)
-				styling = styling.Background(tcell.ColorBlack)
-				if runeChars[0] == '▄' {
-					runeChars[0] = ' '
-				}
-			} else {
-				styling = styling.Foreground(currentCell.fgColour)
-				styling = styling.Background(currentCell.bgColour)
-			}
-			screen.SetCell(x, y+uiHeight, styling, runeChars[0])
-		}
+		renderFrameRow(y, width)
 	}
 	if activeInputBox != nil {
 		activeInputBox.renderCursor()
@@ -263,6 +244,91 @@ func renderCurrentTabWindow() {
 	overlayPageStatusMessage()
 	overlayCallToSupport()
 	screen.Show()
+}
+
+// Paint graphics at their original coordinates first. Text runs then consume
+// terminal display columns independently of the WebExtension's source cells.
+// Empty source cells anchor the next run, absorbing expansion without shifting
+// all subsequent graphics or expanding already-spaced wide text twice.
+func renderFrameRow(y, width int) {
+	f := &CurrentTab.frame
+	for x := 0; x < width; x++ {
+		c := getCell(x, y)
+		fg, bg := c.pixelFgColour, c.bgColour
+		glyph := '▄'
+		if IsMonochromeMode {
+			fg, bg, glyph = tcell.ColorWhite, tcell.ColorBlack, ' '
+		}
+		screen.SetContent(x, y+uiHeight, glyph, nil, tcell.StyleDefault.Foreground(fg).Background(bg))
+	}
+	terminalX, lastGlyphX, inRun := 0, -1, false
+	// Start at the frame origin so horizontal scrolling clips the same mapping.
+	for sourceX := 0; sourceX < f.totalWidth; sourceX++ {
+		if sourceX >= f.xScroll+width && terminalX >= f.xScroll+width {
+			break
+		}
+		c := getCell(sourceX-f.xScroll, y)
+		if c.inputOverlay {
+			// The input editor owns its coordinates/cursor. Keep that existing
+			// overlay outside page-text expansion rather than moving its text
+			// while leaving its cursor and clipping in the old coordinate space.
+			x := sourceX - f.xScroll
+			if len(c.character) > 0 && x >= 0 && x+runewidth.RuneWidth(c.character[0]) <= width {
+				fg, bg := c.fgColour, c.bgColour
+				if IsMonochromeMode {
+					fg, bg = tcell.ColorWhite, tcell.ColorBlack
+				}
+				screen.SetContent(x, y+uiHeight, c.character[0], c.character[1:], tcell.StyleDefault.Foreground(fg).Background(bg))
+			}
+			terminalX, lastGlyphX, inRun = sourceX+1, -1, false
+			continue
+		}
+		runes := c.character
+		if len(runes) == 1 && runes[0] == '▄' {
+			// buildCell replaces empty/whitespace text with graphics. Preserve
+			// explicit spaces (including fullwidth spaces) in a text run.
+			runes = c.sourceText
+		}
+		if len(runes) == 0 {
+			inRun, lastGlyphX = false, -1
+			if terminalX < sourceX+1 {
+				terminalX = sourceX + 1
+			}
+			continue
+		}
+		if !inRun && terminalX < sourceX {
+			terminalX = sourceX
+		}
+		inRun = true
+		for _, r := range runes {
+			if unicode.IsControl(r) {
+				continue
+			}
+			charWidth := runewidth.RuneWidth(r)
+			if charWidth == 0 {
+				if lastGlyphX >= 0 {
+					main, combining, style, _ := screen.GetContent(lastGlyphX, y+uiHeight)
+					screen.SetContent(lastGlyphX, y+uiHeight, main, append(combining, r), style)
+				}
+				continue
+			}
+			x := terminalX - f.xScroll
+			lastGlyphX = -1
+			if x >= 0 && x+charWidth <= width && !unicode.IsSpace(r) &&
+				!getCell(x, y).inputOverlay && (charWidth < 2 || !getCell(x+1, y).inputOverlay) {
+				// Background remains tied to the destination pixel, not shifted
+				// with the source text. tcell owns a wide glyph's second column.
+				bg := getCell(x, y).bgColour
+				fg := c.fgColour
+				if IsMonochromeMode {
+					fg, bg = tcell.ColorWhite, tcell.ColorBlack
+				}
+				screen.SetContent(x, y+uiHeight, r, nil, tcell.StyleDefault.Foreground(fg).Background(bg))
+				lastGlyphX = x
+			}
+			terminalX += charWidth
+		}
+	}
 }
 
 func getCell(x, y int) cell {
@@ -273,9 +339,10 @@ func getCell(x, y int) cell {
 	if currentCell, ok = frame.cells.load(index); !ok {
 		fgColour, bgColour := getHatchedCellColours(x)
 		currentCell = cell{
-			fgColour:  fgColour,
-			bgColour:  bgColour,
-			character: []rune("▄"),
+			fgColour:      fgColour,
+			bgColour:      bgColour,
+			character:     []rune("▄"),
+			pixelFgColour: fgColour,
 		}
 	}
 	return currentCell
