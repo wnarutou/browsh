@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"testing"
@@ -89,8 +90,14 @@ func TestInstallWebextension(t *testing.T) {
 				if args["temporary"] != true {
 					t.Errorf("temporary=true missing: %s", payload)
 				}
+				if got := path.Base(args["path"].(string)); got != "browsh-webext-addon.xpi" {
+					t.Errorf("Firefox 79 needs an XPI suffix for temporary addon resources: %s", got)
+				}
 			} else if _, exists := args["temporary"]; exists {
 				t.Errorf("default request changed: %s", payload)
+			}
+			if !tc.temporary && path.Base(args["path"].(string)) != "browsh-webext-addon" {
+				t.Errorf("default addon filename changed: %s", payload)
 			}
 			data, err := os.ReadFile(args["path"].(string))
 			if err != nil {

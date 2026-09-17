@@ -249,6 +249,11 @@ func installWebextension() {
 		Shutdown(err)
 	}
 	path := path.Join(os.TempDir(), "browsh-webext-addon")
+	if viper.GetBool("firefox.temporary-addon") {
+		// Firefox 79 uses the suffix to select jar: resource URLs for temporary
+		// addons; a suffixless archive incorrectly resolves /tmp/manifest.json.
+		path += ".xpi"
+	}
 	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
 		Shutdown(err)
 	}

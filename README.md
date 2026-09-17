@@ -96,6 +96,11 @@ listener before installing the addon. Look for `FF-CONSOLE` entries containing
 the addon state after 10 seconds. `BROWSH-FIREFOX-DIAGNOSTICS` confirms that the
 listener started. This diagnostic logging does not alter the embedded XPI.
 
+Temporary installation writes the unchanged archive as `browsh-webext-addon.xpi`
+in the system temporary directory. Firefox 79 needs the `.xpi` suffix to resolve
+resources inside the archive; without it, installation can return an addon ID
+while startup fails trying to read `/tmp/manifest.json`.
+
 ## Tests
 
 For the webextension: in `webext/` folder, `npm test`    
